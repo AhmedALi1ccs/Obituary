@@ -351,27 +351,27 @@ class IntegratedObituaryPropertyScraper:
     def run(self):
         """Run the complete integrated scraping process"""
         try:
-        print("Starting integrated obituary and property scraper...")
-        self.setup_driver()
-        
-        # Scrape obituaries
-        self.scrape_legacy(self.driver)
-        self.scrape_dispatch(self.driver)
-        
-        # Check if we got any obituaries
-        if not self.obituaries:
-            print("No obituaries were scraped")
-            return
+            print("Starting integrated obituary and property scraper...")
+            self.setup_driver()
             
-        # Convert to DataFrame and remove duplicates
-        df = pd.DataFrame(self.obituaries)
-        
-        # Verify DataFrame has required columns
-        required_columns = ['name', 'source']
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        if missing_columns:
-            print(f"Missing required columns: {missing_columns}")
-            return
+            # Scrape obituaries
+            self.scrape_legacy(self.driver)
+            self.scrape_dispatch(self.driver)
+            
+            # Check if we got any obituaries
+            if not self.obituaries:
+                print("No obituaries were scraped")
+                return
+                
+            # Convert to DataFrame and remove duplicates
+            df = pd.DataFrame(self.obituaries)
+            
+            # Verify DataFrame has required columns
+            required_columns = ['name', 'source']
+            missing_columns = [col for col in required_columns if col not in df.columns]
+            if missing_columns:
+                print(f"Missing required columns: {missing_columns}")
+                return
             df = df.drop_duplicates(subset=['name', 'source'])
             
             # Add new columns for property information
