@@ -22,16 +22,26 @@ def test_drive_access():
     try:
         # Get credentials from environment
         print("\nLoading credentials...")
-        creds_json = os.getenv('GOOGLE_CREDENTIALS_JSON')
-        if not creds_json:
+        creds_raw = os.getenv('GOOGLE_CREDENTIALS_JSON')
+        if not creds_raw:
             print("❌ No credentials found in environment")
             return
-            
+        
+        # Parse the JSON string into a dictionary
+        try:
+            creds_dict = json.loads(creds_raw)
+            print("✓ Successfully parsed credentials JSON")
+        except json.JSONDecodeError as e:
+            print(f"❌ Failed to parse credentials JSON: {e}")
+            print(f"Raw credentials (first 100 chars): {creds_raw[:100]}...")
+            return
+        
+        print("\nCreating credentials object...")
         credentials = service_account.Credentials.from_service_account_info(
-            json.loads(creds_json),
+            creds_dict,
             scopes=['https://www.googleapis.com/auth/drive.file']
         )
-        print("✓ Credentials loaded")
+        print("✓ Credentials created successfully")
         
         # Create Drive service
         print("\nCreating Drive service...")
