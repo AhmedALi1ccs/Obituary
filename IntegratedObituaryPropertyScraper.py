@@ -29,127 +29,109 @@ class IntegratedObituaryPropertyScraper:
         self.folder_id = "1Vn02sVpKU9fGLGG3fo-ZgngWXKhntNvb"
         load_dotenv()  # Load environment variables
 
+    
     def setup_google_drive(self):
-        """Setup Google Drive API service"""
+        """Setup Google Drive API service with detailed logging"""
         try:
-            from config import get_google_credentials
-            credentials_dict = get_google_credentials()
-            
-            if not credentials_dict:
-                print("Failed to get Google credentials")
+            print("\n=== Starting Google Drive Setup ===")
+            credentials_json = os.getenv('GOOGLE_CREDENTIALS_JSON')
+            if not credentials_json:
+                print("❌ No Google credentials found in environment")
                 return None
                 
+            print("✓ Found credentials in environment")
+            print("✓ Creating credentials object...")
+            
             credentials = service_account.Credentials.from_service_account_info(
-                credentials_dict,
+                json.loads(credentials_json),
                 scopes=['https://www.googleapis.com/auth/drive.file']
             )
-            return build('drive', 'v3', credentials=credentials)
-        except Exception as e:
-            print(f"Error setting up Google Drive: {e}")
-            return None
-
-    def setup_google_drive(self):
-    """Setup Google Drive API service with detailed logging"""
-    try:
-        print("\n=== Starting Google Drive Setup ===")
-        credentials_json = os.getenv('GOOGLE_CREDENTIALS_JSON')
-        if not credentials_json:
-            print("❌ No Google credentials found in environment")
-            return None
             
-        print("✓ Found credentials in environment")
-        print("✓ Creating credentials object...")
-        
-        credentials = service_account.Credentials.from_service_account_info(
-            json.loads(credentials_json),
-            scopes=['https://www.googleapis.com/auth/drive.file']
-        )
-        
-        print("✓ Building Drive service...")
-        service = build('drive', 'v3', credentials=credentials)
-        
-        # Test folder access
-        print(f"Testing access to folder {self.folder_id}...")
+            print("✓ Building Drive service...")
+            service = build('drive', 'v3', credentials=credentials)
+            
+            # Test folder access
+            print(f"Testing access to folder {self.folder_id}...")
+            try:
+                folder = service.files().get(fileId=self.folder_id).execute()
+                print(f"✓ Successfully accessed folder: {folder.get('name', 'unknown')}")
+            except Exception as e:
+                print(f"❌ Could not access folder: {str(e)}")
+                if 'not found' in str(e).lower():
+                    print("   -> Folder might not exist or service account doesn't have access")
+                return None
+                
+            return service
+            
+        except Exception as e:
+            print(f"\n❌ Error in setup_google_drive: {str(e)}")
+            print(f"Full error: {traceback.format_exc()}")
+            return None
+    
+    def save_to_drive(self, df, filename):
+        """Save DataFrame to Google Drive with detailed logging"""
         try:
-            folder = service.files().get(fileId=self.folder_id).execute()
-            print(f"✓ Successfully accessed folder: {folder.get('name', 'unknown')}")
+            print("\n=== Starting Drive Upload Process ===")
+            
+            # Check if we have any data
+            if df.empty:
+                print("❌ DataFrame is empty, nothing to save")
+                return False
+                
+            print(f"✓ DataFrame has {len(df)} rows to save")
+            
+            # Create drive service
+            print("\nSetting up Drive service...")
+            drive_service = self.setup_google_drive()
+            if not drive_service:
+                print("❌ Failed to setup Google Drive service")
+                return False
+    
+            # Save to temp file
+            print("\nSaving to temporary file...")
+            temp_filename = f"temp_{filename}"
+            df.to_csv(temp_filename, index=False)
+            print(f"✓ Saved to {temp_filename}")
+    
+            # Prepare upload
+            print("\nPreparing file upload...")
+            file_metadata = {
+                'name': filename,
+                'parents': [self.folder_id]
+            }
+    
+            media = MediaFileUpload(
+                temp_filename,
+                mimetype='text/csv',
+                resumable=True
+            )
+    
+            # Attempt upload
+            print("\nUploading file...")
+            file = drive_service.files().create(
+                body=file_metadata,
+                media_body=media,
+                fields='id,name,webViewLink'
+            ).execute()
+    
+            # Clean up
+            os.remove(temp_filename)
+            print(f"✓ Removed temporary file: {temp_filename}")
+    
+            print("\n=== Upload Successful ===")
+            print(f"File Name: {file.get('name')}")
+            print(f"File ID: {file.get('id')}")
+            print(f"Web Link: {file.get('webViewLink')}")
+            return True
+    
         except Exception as e:
-            print(f"❌ Could not access folder: {str(e)}")
-            if 'not found' in str(e).lower():
-                print("   -> Folder might not exist or service account doesn't have access")
-            return None
-            
-        return service
-        
-    except Exception as e:
-        print(f"\n❌ Error in setup_google_drive: {str(e)}")
-        print(f"Full error: {traceback.format_exc()}")
-        return None
-
-def save_to_drive(self, df, filename):
-    """Save DataFrame to Google Drive with detailed logging"""
-    try:
-        print("\n=== Starting Drive Upload Process ===")
-        
-        # Check if we have any data
-        if df.empty:
-            print("❌ DataFrame is empty, nothing to save")
+            print(f"\n❌ Error in save_to_drive: {str(e)}")
+            print(f"Full error: {traceback.format_exc()}")
+            if 'insufficient permissions' in str(e).lower():
+                print("\nPossible permission issues:")
+                print("1. Check if service account email has access to the folder")
+                print("2. Verify Drive API is enabled in Google Cloud Console")
             return False
-            
-        print(f"✓ DataFrame has {len(df)} rows to save")
-        
-        # Create drive service
-        print("\nSetting up Drive service...")
-        drive_service = self.setup_google_drive()
-        if not drive_service:
-            print("❌ Failed to setup Google Drive service")
-            return False
-
-        # Save to temp file
-        print("\nSaving to temporary file...")
-        temp_filename = f"temp_{filename}"
-        df.to_csv(temp_filename, index=False)
-        print(f"✓ Saved to {temp_filename}")
-
-        # Prepare upload
-        print("\nPreparing file upload...")
-        file_metadata = {
-            'name': filename,
-            'parents': [self.folder_id]
-        }
-
-        media = MediaFileUpload(
-            temp_filename,
-            mimetype='text/csv',
-            resumable=True
-        )
-
-        # Attempt upload
-        print("\nUploading file...")
-        file = drive_service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields='id,name,webViewLink'
-        ).execute()
-
-        # Clean up
-        os.remove(temp_filename)
-        print(f"✓ Removed temporary file: {temp_filename}")
-
-        print("\n=== Upload Successful ===")
-        print(f"File Name: {file.get('name')}")
-        print(f"File ID: {file.get('id')}")
-        print(f"Web Link: {file.get('webViewLink')}")
-        return True
-
-    except Exception as e:
-        print(f"\n❌ Error in save_to_drive: {str(e)}")
-        print(f"Full error: {traceback.format_exc()}")
-        if 'insufficient permissions' in str(e).lower():
-            print("\nPossible permission issues:")
-            print("1. Check if service account email has access to the folder")
-            print("2. Verify Drive API is enabled in Google Cloud Console")
-        return False
 
     def split_name(self, full_name):
         """Split full name into first and last name with special case handling"""
