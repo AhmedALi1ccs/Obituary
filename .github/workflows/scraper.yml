@@ -31,11 +31,36 @@ jobs:
         python -m pip install --upgrade pip
         pip install selenium undetected-chromedriver beautifulsoup4 pandas python-dotenv google-oauth2-tool google-api-python-client
     
-    - name: Create .env file
+    - name: Add chrome-options
       run: |
-        echo "${{ secrets.GOOGLE_CREDENTIALS_JSON }}" > google_credentials.json
+        echo '#!/bin/sh' > /usr/local/bin/chrome-options
+        echo 'exec "$@" --no-sandbox --headless --disable-gpu --disable-dev-shm-usage --window-size=1920,1080' >> /usr/local/bin/chrome-options
+        chmod +x /usr/local/bin/chrome-options
+    
+    - name: Print debugging info
+      run: |
+        echo "Chrome version:"
+        google-chrome --version
+        echo "Python version:"
+        python --version
+        echo "Working directory:"
+        pwd
+        echo "Directory contents:"
+        ls -la
     
     - name: Run scraper
-      run: python run_scraper.py
       env:
         GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+      run: |
+        echo "Running scraper at $(date)"
+        python -c "import json; print('Validating credentials...'); json.loads('${{ secrets.GOOGLE_CREDENTIALS_JSON }}')" || echo "Invalid JSON in credentials"
+        python run_scraper.py
+    
+    - name: Upload log files if failure
+      if: failure()
+      uses: actions/upload-artifact@v2
+      with:
+        name: error-logs
+        path: |
+          *.log
+          ~/obituary_scraper_logs/*.log
