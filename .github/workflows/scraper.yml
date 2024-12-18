@@ -24,7 +24,7 @@ jobs:
         wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
         sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
         sudo apt-get update
-        sudo apt-get install -y google-chrome-stable
+        sudo apt-get install -y google-chrome-stable chromium-chromedriver
     
     - name: Install dependencies
       run: |
@@ -33,6 +33,7 @@ jobs:
     
     - name: Add chrome-options
       run: |
+        sudo mkdir -p /usr/local/bin
         sudo echo '#!/bin/sh' > /usr/local/bin/chrome-options
         sudo echo 'exec "$@" --no-sandbox --headless --disable-gpu --disable-dev-shm-usage --window-size=1920,1080' >> /usr/local/bin/chrome-options
         sudo chmod +x /usr/local/bin/chrome-options
@@ -53,15 +54,14 @@ jobs:
         GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
       run: |
         echo "Running scraper at $(date)"
-        python -c "import json; print('Validating credentials...'); json.loads('${{ secrets.GOOGLE_CREDENTIALS_JSON }}')" || echo "Invalid JSON in credentials"
         python run_scraper.py
     
     - name: Upload log files if failure
       if: failure()
-      uses: actions/upload-artifact@v4  # Updated to v4
+      uses: actions/upload-artifact@v4
       with:
         name: error-logs
         path: |
           *.log
           ~/obituary_scraper_logs/*.log
-        retention-days: 5  # Keep logs for 5 days
+        retention-days: 5
