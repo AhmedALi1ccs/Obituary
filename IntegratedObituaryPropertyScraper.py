@@ -32,8 +32,15 @@ class IntegratedObituaryPropertyScraper:
     def setup_google_drive(self):
         """Setup Google Drive API service"""
         try:
+            from config import get_google_credentials
+            credentials_dict = get_google_credentials()
+            
+            if not credentials_dict:
+                print("Failed to get Google credentials")
+                return None
+                
             credentials = service_account.Credentials.from_service_account_info(
-                eval(os.getenv('GOOGLE_CREDENTIALS_JSON')),
+                credentials_dict,
                 scopes=['https://www.googleapis.com/auth/drive.file']
             )
             return build('drive', 'v3', credentials=credentials)
@@ -344,15 +351,27 @@ class IntegratedObituaryPropertyScraper:
     def run(self):
         """Run the complete integrated scraping process"""
         try:
-            print("Starting integrated obituary and property scraper...")
-            self.setup_driver()
+        print("Starting integrated obituary and property scraper...")
+        self.setup_driver()
+        
+        # Scrape obituaries
+        self.scrape_legacy(self.driver)
+        self.scrape_dispatch(self.driver)
+        
+        # Check if we got any obituaries
+        if not self.obituaries:
+            print("No obituaries were scraped")
+            return
             
-            # Scrape obituaries
-            self.scrape_legacy(self.driver)
-            self.scrape_dispatch(self.driver)
-            
-            # Convert to DataFrame and remove duplicates
-            df = pd.DataFrame(self.obituaries)
+        # Convert to DataFrame and remove duplicates
+        df = pd.DataFrame(self.obituaries)
+        
+        # Verify DataFrame has required columns
+        required_columns = ['name', 'source']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            print(f"Missing required columns: {missing_columns}")
+            return
             df = df.drop_duplicates(subset=['name', 'source'])
             
             # Add new columns for property information
