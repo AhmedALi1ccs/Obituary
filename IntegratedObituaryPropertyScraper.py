@@ -132,7 +132,38 @@ class IntegratedObituaryPropertyScraper:
                 print("1. Check if service account email has access to the folder")
                 print("2. Verify Drive API is enabled in Google Cloud Console")
             return False
+            
 
+    def setup_driver(self):
+        """Initialize undetected-chromedriver with headless mode"""
+        try:
+            time.sleep(2)
+            
+            options = uc.ChromeOptions()
+            
+            # Headless mode configuration
+            options.add_argument('--headless')
+            options.add_argument('--no-sandbox')
+            options.add_argument('--disable-dev-shm-usage')
+            options.add_argument('--disable-gpu')
+            options.add_argument('--window-size=1920,1080')
+            options.add_argument('--disable-features=VizDisplayCompositor')
+            options.add_argument('--disable-blink-features=AutomationControlled')
+            
+            self.driver = uc.Chrome(
+                options=options,
+                driver_executable_path=None,
+                use_subprocess=True,
+                version_main=None
+            )
+            
+            # Set window size after initialization
+            self.driver.set_window_size(1920, 1080)
+            print("✓ Chrome driver setup complete")
+            
+        except Exception as e:
+            print(f"❌ Error setting up Chrome driver: {e}")
+            sys.exit(1)
     def split_name(self, full_name):
         """Split full name into first and last name with special case handling"""
         # Clean and split the name
