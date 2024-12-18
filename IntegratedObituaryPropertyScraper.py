@@ -30,17 +30,33 @@ class IntegratedObituaryPropertyScraper:
         load_dotenv()  # Load environment variables
 
     def setup_google_drive(self):
-        """Setup Google Drive API service"""
+        """Setup Google Drive API service with GitHub Actions support"""
         try:
+            # Try environment variable first (for GitHub Actions)
+            creds_raw = os.getenv('GOOGLE_CREDENTIALS_JSON')
+            if creds_raw:
+                try:
+                    creds_dict = json.loads(creds_raw)
+                except json.JSONDecodeError as e:
+                    print(f"Error parsing credentials JSON: {e}")
+                    return None
+            else:
+                # Fallback to .env file (for local development)
+                creds_raw = os.getenv('GOOGLE_CREDENTIALS_JSON')
+                if not creds_raw:
+                    print("No credentials found in environment or .env file")
+                    return None
+                creds_dict = eval(creds_raw)
+    
             credentials = service_account.Credentials.from_service_account_info(
-                eval(os.getenv('GOOGLE_CREDENTIALS_JSON')),
+                creds_dict,
                 scopes=['https://www.googleapis.com/auth/drive.file']
             )
             return build('drive', 'v3', credentials=credentials)
         except Exception as e:
             print(f"Error setting up Google Drive: {e}")
+            print(f"Full error: {traceback.format_exc()}")
             return None
-
     def save_to_drive(self, df, filename):
         """Save DataFrame to Google Drive"""
         try:
