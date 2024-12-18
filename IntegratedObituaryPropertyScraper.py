@@ -86,7 +86,7 @@ class IntegratedObituaryPropertyScraper:
             return False
 
     def setup_driver(self):
-        """Initialize undetected-chromedriver with improved error handling"""
+        """Initialize undetected-chromedriver for both local and GitHub Actions"""
         try:
             time.sleep(2)
             
@@ -99,8 +99,14 @@ class IntegratedObituaryPropertyScraper:
             options.add_argument('--disable-features=VizDisplayCompositor')
             options.add_argument('--disable-blink-features=AutomationControlled')
             
-            # MacOS specific configurations
-            if sys.platform == "darwin":
+            # Add headless mode
+            options.add_argument('--headless')
+            
+            # Add user agent
+            options.add_argument('--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+            
+            # Platform specific settings
+            if sys.platform == "darwin":  # Local MacOS
                 options.add_argument('--disable-features=GPU')
                 options.binary_location = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
             
@@ -111,13 +117,17 @@ class IntegratedObituaryPropertyScraper:
                 version_main=None
             )
             
+            # Set window size
+            self.driver.set_window_size(1920, 1080)
+            print("✓ Chrome driver setup complete")
+            
         except Exception as e:
             print(f"Error setting up Chrome driver: {e}")
             print("\nTroubleshooting steps:")
             print("1. Make sure Chrome browser is installed")
-            print("2. Try running without headless mode first")
-            print("3. Check if ChromeDriver is compatible with your Chrome version")
-            print("4. Ensure you have sufficient permissions")
+            print("2. Check if ChromeDriver is compatible with your Chrome version")
+            print("3. Ensure you have sufficient permissions")
+            print(f"Full error: {traceback.format_exc()}")
             sys.exit(1)
 
     def split_name(self, full_name):
