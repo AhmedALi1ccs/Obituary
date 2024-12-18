@@ -48,79 +48,108 @@ class IntegratedObituaryPropertyScraper:
             print(f"Error setting up Google Drive: {e}")
             return None
 
-    def save_to_drive(self, df, filename):
-        """Save DataFrame to Google Drive"""
+    def setup_google_drive(self):
+    """Setup Google Drive API service with detailed logging"""
+    try:
+        print("\n=== Starting Google Drive Setup ===")
+        credentials_json = os.getenv('GOOGLE_CREDENTIALS_JSON')
+        if not credentials_json:
+            print("❌ No Google credentials found in environment")
+            return None
+            
+        print("✓ Found credentials in environment")
+        print("✓ Creating credentials object...")
+        
+        credentials = service_account.Credentials.from_service_account_info(
+            json.loads(credentials_json),
+            scopes=['https://www.googleapis.com/auth/drive.file']
+        )
+        
+        print("✓ Building Drive service...")
+        service = build('drive', 'v3', credentials=credentials)
+        
+        # Test folder access
+        print(f"Testing access to folder {self.folder_id}...")
         try:
-            # Create drive service
-            drive_service = self.setup_google_drive()
-            if not drive_service:
-                print("Failed to setup Google Drive service")
-                return False
-
-            # Save DataFrame to temporary file
-            temp_filename = f"temp_{filename}"
-            df.to_csv(temp_filename, index=False)
-
-            # Prepare file metadata
-            file_metadata = {
-                'name': filename,
-                'parents': [self.folder_id]
-            }
-
-            # Create media
-            media = MediaFileUpload(
-                temp_filename,
-                mimetype='text/csv',
-                resumable=True
-            )
-
-            # Upload file
-            file = drive_service.files().create(
-                body=file_metadata,
-                media_body=media,
-                fields='id'
-            ).execute()
-
-            # Remove temporary file
-            os.remove(temp_filename)
-
-            print(f"\nSuccessfully uploaded {filename} to Google Drive")
-            print(f"File ID: {file.get('id')}")
-            return True
-
+            folder = service.files().get(fileId=self.folder_id).execute()
+            print(f"✓ Successfully accessed folder: {folder.get('name', 'unknown')}")
         except Exception as e:
-            print(f"Error saving to Google Drive: {e}")
+            print(f"❌ Could not access folder: {str(e)}")
+            if 'not found' in str(e).lower():
+                print("   -> Folder might not exist or service account doesn't have access")
+            return None
+            
+        return service
+        
+    except Exception as e:
+        print(f"\n❌ Error in setup_google_drive: {str(e)}")
+        print(f"Full error: {traceback.format_exc()}")
+        return None
+
+def save_to_drive(self, df, filename):
+    """Save DataFrame to Google Drive with detailed logging"""
+    try:
+        print("\n=== Starting Drive Upload Process ===")
+        
+        # Check if we have any data
+        if df.empty:
+            print("❌ DataFrame is empty, nothing to save")
+            return False
+            
+        print(f"✓ DataFrame has {len(df)} rows to save")
+        
+        # Create drive service
+        print("\nSetting up Drive service...")
+        drive_service = self.setup_google_drive()
+        if not drive_service:
+            print("❌ Failed to setup Google Drive service")
             return False
 
-    def setup_driver(self):
-        """Initialize undetected-chromedriver with headless mode"""
-        try:
-            time.sleep(2)
-            
-            options = uc.ChromeOptions()
-            
-            # Headless mode configuration
-            options.add_argument('--headless')
-            options.add_argument('--no-sandbox')
-            options.add_argument('--disable-dev-shm-usage')
-            options.add_argument('--disable-gpu')
-            options.add_argument('--window-size=1920,1080')
-            options.add_argument('--disable-features=VizDisplayCompositor')
-            options.add_argument('--disable-blink-features=AutomationControlled')
-            
-            self.driver = uc.Chrome(
-                options=options,
-                driver_executable_path=None,
-                use_subprocess=True,
-                version_main=None
-            )
-            
-            # Set window size after initialization
-            self.driver.set_window_size(1920, 1080)
-            
-        except Exception as e:
-            print(f"Error setting up Chrome driver: {e}")
-            sys.exit(1)
+        # Save to temp file
+        print("\nSaving to temporary file...")
+        temp_filename = f"temp_{filename}"
+        df.to_csv(temp_filename, index=False)
+        print(f"✓ Saved to {temp_filename}")
+
+        # Prepare upload
+        print("\nPreparing file upload...")
+        file_metadata = {
+            'name': filename,
+            'parents': [self.folder_id]
+        }
+
+        media = MediaFileUpload(
+            temp_filename,
+            mimetype='text/csv',
+            resumable=True
+        )
+
+        # Attempt upload
+        print("\nUploading file...")
+        file = drive_service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id,name,webViewLink'
+        ).execute()
+
+        # Clean up
+        os.remove(temp_filename)
+        print(f"✓ Removed temporary file: {temp_filename}")
+
+        print("\n=== Upload Successful ===")
+        print(f"File Name: {file.get('name')}")
+        print(f"File ID: {file.get('id')}")
+        print(f"Web Link: {file.get('webViewLink')}")
+        return True
+
+    except Exception as e:
+        print(f"\n❌ Error in save_to_drive: {str(e)}")
+        print(f"Full error: {traceback.format_exc()}")
+        if 'insufficient permissions' in str(e).lower():
+            print("\nPossible permission issues:")
+            print("1. Check if service account email has access to the folder")
+            print("2. Verify Drive API is enabled in Google Cloud Console")
+        return False
 
     def split_name(self, full_name):
         """Split full name into first and last name with special case handling"""
