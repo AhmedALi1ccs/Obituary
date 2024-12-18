@@ -375,73 +375,87 @@ class IntegratedObituaryPropertyScraper:
     def run(self):
         """Run the complete integrated scraping process"""
         try:
-            print("Starting integrated obituary and property scraper...")
+            print("=== Starting integrated obituary and property scraper ===")
             self.setup_driver()
             
             # Scrape obituaries
+            print("\n=== Scraping obituaries ===")
             self.scrape_legacy(self.driver)
-            self.scrape_dispatch(self.driver)
+            legacy_count = len([o for o in self.obituaries if o['source'] == 'legacy.com'])
+            print(f"Found {legacy_count} obituaries from Legacy.com")
             
-            # Convert to DataFrame and remove duplicates
+            self.scrape_dispatch(self.driver)
+            dispatch_count = len([o for o in self.obituaries if o['source'] == 'dispatch.com'])
+            print(f"Found {dispatch_count} obituaries from Dispatch.com")
+            
+            if not self.obituaries:
+                print("No obituaries found. Exiting.")
+                return
+                
+            # Convert to DataFrame
+            print("\n=== Processing data ===")
             df = pd.DataFrame(self.obituaries)
             df = df.drop_duplicates(subset=['name', 'source'])
             
-            # Add new columns for property information
+            # Add property information columns
             df['owner_mailing'] = ''
             df['contact_address'] = ''
             df['site_address'] = ''
             df['city'] = ''
             df['zip_code'] = ''
             
-            # Process each obituary for property information
-            print("\nSearching property records...")
+            # Process property information
+            print("\n=== Searching property records ===")
             for index, row in df.iterrows():
-                owner_mailing, contact_address, site_address, city, zip_code = self.search_property(row['first_name'], row['last_name'])
+                print(f"\nProcessing: {row['first_name']} {row['last_name']}")
+                owner_mailing, contact_address, site_address, city, zip_code = self.search_property(
+                    row['first_name'], row['last_name']
+                )
                 df.at[index, 'owner_mailing'] = owner_mailing
                 df.at[index, 'contact_address'] = contact_address
                 df.at[index, 'site_address'] = site_address
                 df.at[index, 'city'] = city
                 df.at[index, 'zip_code'] = zip_code
-                print(f"Processed: {row['first_name']} {row['last_name']}")
-                print(f"  Owner Mailing: {owner_mailing}")
-                print(f"  Contact Address: {contact_address}")
-                print(f"  Site Address: {site_address}")
-                print(f"  City: {city}, Zip: {zip_code}")
+                print(f"✓ Found property data: {site_address}, {city}")
                 time.sleep(2)
             
-            # Get current date in MM/DD/YY format
+            # Save results
+            print("\n=== Saving results ===")
             current_date = datetime.now().strftime('%m_%d_%y')
             filename = f'obituaries_with_property_{current_date}.csv'
             
-            # Save to Google Drive
             if self.save_to_drive(df, filename):
-                print(f"\nSuccessfully saved {len(df)} records to Google Drive")
+                print(f"✓ Successfully saved {len(df)} records to Google Drive")
             else:
-                print("\nFailed to save to Google Drive, saving locally instead")
+                print("❌ Failed to save to Google Drive, saving locally")
                 df.to_csv(filename, index=False)
             
             # Print summary
-            print(f"\nScraping Summary:")
-            sources_count = df['source'].value_counts()
-            print("\nObituaries by source:")
-            for source, count in sources_count.items():
-                print(f"{source}: {count}")
-            
-            print("\nProperty records found:")
-            property_count = len(df[df['owner_mailing'] != 'NOTONAUDITOR'])
-            print(f"Records with property information: {property_count}")
-            print(f"Records without property information: {len(df) - property_count}")
+            print("\n=== Scraping Summary ===")
+            if 'source' in df.columns:
+                sources_count = df['source'].value_counts()
+                print("\nObituaries by source:")
+                for source, count in sources_count.items():
+                    print(f"{source}: {count}")
+                
+                print("\nProperty records found:")
+                property_count = len(df[df['owner_mailing'] != 'NOTONAUDITOR'])
+                print(f"Records with property information: {property_count}")
+                print(f"Records without property information: {len(df) - property_count}")
+            else:
+                print("No source column found in results")
             
         except Exception as e:
-            print(f"Error during scraping: {e}")
+            print(f"\n❌ Error during scraping: {str(e)}")
+            print(f"Full error: {traceback.format_exc()}")
             raise e
         finally:
             if self.driver:
                 try:
                     self.driver.quit()
-                    print("\nDriver closed successfully")
+                    print("\n✓ Driver closed successfully")
                 except:
-                    print("\nError closing driver")
+                    print("\n❌ Error closing driver")
 if __name__ == "__main__":
     scraper = IntegratedObituaryPropertyScraper()
     scraper.run()
