@@ -31,7 +31,25 @@ jobs:
         python -m pip install --upgrade pip
         pip install selenium undetected-chromedriver beautifulsoup4 pandas python-dotenv
         pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib oauth2client google-auth
+
+    - name: Add chrome-options
+      run: |
+        sudo mkdir -p /usr/local/bin
+        sudo echo '#!/bin/sh' > /usr/local/bin/chrome-options
+        sudo echo 'exec "$@" --no-sandbox --headless --disable-gpu --disable-dev-shm-usage --window-size=1920,1080' >> /usr/local/bin/chrome-options
+        sudo chmod +x /usr/local/bin/chrome-options
     
+    - name: Print debugging info
+      run: |
+        echo "Chrome version:"
+        google-chrome --version
+        echo "Python version:"
+        python --version
+        echo "Working directory:"
+        pwd
+        echo "Directory contents:"
+        ls -la
+        
     - name: Test Google Drive Access
       env:
         GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
