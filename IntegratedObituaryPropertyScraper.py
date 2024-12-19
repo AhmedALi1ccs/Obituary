@@ -102,49 +102,61 @@ class IntegratedObituaryPropertyScraper:
         except Exception as e:
             print(f"Error saving to Google Drive: {e}")
             return False
-
+    #
     def setup_driver(self):
-        """Initialize undetected-chromedriver for both local and GitHub Actions"""
+        """Initialize undetected-chromedriver with robust error handling"""
         try:
             time.sleep(2)
             
             options = uc.ChromeOptions()
             
-            # Common options for stability
+            # Enhanced options for stability
             options.add_argument('--disable-gpu')
             options.add_argument('--no-sandbox')
             options.add_argument('--disable-dev-shm-usage')
             options.add_argument('--disable-features=VizDisplayCompositor')
             options.add_argument('--disable-blink-features=AutomationControlled')
-            
-            # Add headless mode
             options.add_argument('--headless')
+            options.add_argument('--disable-web-security')
+            options.add_argument('--disable-features=IsolateOrigins,site-per-process')
+            
+            # Set longer timeouts
+            options.add_argument('--timeout=300000')
+            options.add_argument('--page-load-timeout=300000')
             
             # Add user agent
             options.add_argument('--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
             
-            # Platform specific settings
-            if sys.platform == "darwin":  # Local MacOS
-                options.add_argument('--disable-features=GPU')
-                options.binary_location = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-            
-            self.driver = uc.Chrome(
-                options=options,
-                driver_executable_path=None,
-                use_subprocess=True,
-                version_main=None
-            )
-            
-            # Set window size
-            self.driver.set_window_size(1920, 1080)
-            print("✓ Chrome driver setup complete")
+            # Create driver with retry logic
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    self.driver = uc.Chrome(
+                        options=options,
+                        driver_executable_path=None,
+                        use_subprocess=True,
+                        version_main=None
+                    )
+                    
+                    # Configure timeouts
+                    self.driver.set_page_load_timeout(300)
+                    self.driver.implicitly_wait(20)
+                    
+                    # Set window size
+                    self.driver.set_window_size(1920, 1080)
+                    print(f"✓ Chrome driver setup complete (attempt {attempt + 1})")
+                    return
+                    
+                except Exception as e:
+                    print(f"Setup attempt {attempt + 1} failed: {e}")
+                    if attempt < max_retries - 1:
+                        print("Retrying setup...")
+                        time.sleep(5)
+                    else:
+                        raise
             
         except Exception as e:
             print(f"Error setting up Chrome driver: {e}")
-            print("\nTroubleshooting steps:")
-            print("1. Make sure Chrome browser is installed")
-            print("2. Check if ChromeDriver is compatible with your Chrome version")
-            print("3. Ensure you have sufficient permissions")
             print(f"Full error: {traceback.format_exc()}")
             sys.exit(1)
 
@@ -179,54 +191,99 @@ class IntegratedObituaryPropertyScraper:
     # [Previous scraping methods remain the same: scrape_legacy, scrape_fcfreepress, scrape_dispatch]
     # Include all the scraping methods from the first code here
     def scrape_legacy(self, driver):
-        """Scrape obituaries from legacy.com"""
+        """Scrape obituaries from legacy.com with enhanced error handling"""
         print("\nScraping legacy.com...")
-        driver.get(self.sources['legacy'])
-        time.sleep(5)
-        try:
-            no_thanks_button = driver.find_element(By.CSS_SELECTOR, "button[data-click='close']")
-            no_thanks_button.click()
-            print("Closed popup successfully")
-            time.sleep(2)  # Wait for popup to close
-        except Exception as e:
-            print("No popup found or couldn't close it:", e)
-
-        def collect_visible_obituaries():
-            soup = BeautifulSoup(driver.page_source, 'html.parser')
-            current_date = None
-            current_entries = set()
-            
-            for element in soup.find_all(['p', 'h4']):
-                if element.get('color') == 'neutral50' and 'Box-sc-ucqo0b-0' in element.get('class', []):
-                    current_date = element.text.strip()
-                elif element.get('data-component') == 'PersonCardFullName':
-                    full_name = element.text.strip()
-                    if current_date and full_name:
-                        first_name, last_name, name = self.split_name(full_name)
-                        entry = {
-                            'first_name': first_name,
-                            'last_name': last_name,
-                            'name': name,
-                            'date': current_date,
-                            'source': 'legacy.com',
-                            'age': 'N/A',
-                            'location': 'Ohio'
-                        }
-                        self.obituaries.append(entry)
-            
-        current_position = 0
-        scroll_amount = 500
+        max_retries = 3
         
-        while True:
-            collect_visible_obituaries()
-            current_position += scroll_amount
-            driver.execute_script(f"window.scrollTo(0, {current_position});")
-            time.sleep(1)
-            
-            total_height = driver.execute_script("return document.body.scrollHeight")
-            if current_position >= total_height:
-                collect_visible_obituaries()
-                break
+        for attempt in range(max_retries):
+            try:
+                print(f"Attempt {attempt + 1} to load legacy.com")
+                
+                # Use WebDriverWait for page load
+                driver.get(self.sources['legacy'])
+                WebDriverWait(driver, 20).until(
+                    EC.presence_of_element_located((By.TAG_NAME, "body"))
+                )
+                
+                time.sleep(5)
+                
+                # Handle popup with retry
+                popup_attempts = 3
+                for popup_attempt in range(popup_attempts):
+                    try:
+                        no_thanks_button = WebDriverWait(driver, 5).until(
+                            EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-click='close']"))
+                        )
+                        no_thanks_button.click()
+                        print("Closed popup successfully")
+                        time.sleep(2)
+                        break
+                    except Exception as e:
+                        print(f"Popup handling attempt {popup_attempt + 1} failed: {e}")
+    
+                def collect_visible_obituaries():
+                    soup = BeautifulSoup(driver.page_source, 'html.parser')
+                    current_date = None
+                    entries_found = 0
+                    
+                    for element in soup.find_all(['p', 'h4']):
+                        if element.get('color') == 'neutral50' and 'Box-sc-ucqo0b-0' in element.get('class', []):
+                            current_date = element.text.strip()
+                            print(f"Processing date: {current_date}")
+                        elif element.get('data-component') == 'PersonCardFullName':
+                            full_name = element.text.strip()
+                            if current_date and full_name:
+                                first_name, last_name, name = self.split_name(full_name)
+                                entry = {
+                                    'first_name': first_name,
+                                    'last_name': last_name,
+                                    'name': name,
+                                    'date': current_date,
+                                    'source': 'legacy.com',
+                                    'age': 'N/A',
+                                    'location': 'Ohio'
+                                }
+                                self.obituaries.append(entry)
+                                entries_found += 1
+                    
+                    return entries_found
+                
+                total_entries = 0
+                max_scroll_attempts = 20
+                scroll_attempt = 0
+                last_entries_count = 0
+                
+                while scroll_attempt < max_scroll_attempts:
+                    new_entries = collect_visible_obituaries()
+                    total_entries += new_entries
+                    print(f"Found {new_entries} new entries (Total: {total_entries})")
+                    
+                    if new_entries == last_entries_count:
+                        scroll_attempt += 1
+                    last_entries_count = new_entries
+                    
+                    # Scroll with explicit wait
+                    current_height = driver.execute_script("return document.body.scrollHeight")
+                    driver.execute_script(f"window.scrollTo(0, {current_height})")
+                    time.sleep(2)
+                    
+                    new_height = driver.execute_script("return document.body.scrollHeight")
+                    if new_height == current_height:
+                        print("Reached end of page")
+                        collect_visible_obituaries()  # One final collection
+                        break
+                
+                print(f"Successfully scraped {total_entries} obituaries from legacy.com")
+                return
+                
+            except Exception as e:
+                print(f"Attempt {attempt + 1} failed: {e}")
+                if attempt < max_retries - 1:
+                    print("Retrying after delay...")
+                    time.sleep(10)
+                else:
+                    print("All attempts to scrape legacy.com failed")
+                    raise
             
     def scrape_dispatch(self, driver):
         """Scrape obituaries from dispatch.com with enhanced timeout handling"""
