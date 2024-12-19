@@ -228,7 +228,7 @@ class IntegratedObituaryPropertyScraper:
                 collect_visible_obituaries()
                 break
             
-   def scrape_dispatch(self, driver):
+    def scrape_dispatch(self, driver):
         """Scrape obituaries from dispatch.com with enhanced timeout handling"""
         print("\nScraping dispatch.com...")
         max_retries = 3
