@@ -229,7 +229,7 @@ class IntegratedObituaryPropertyScraper:
                 if not driver.current_url:
                     raise Exception("Driver lost connection")
                 
-                # Rest of your existing code
+                # Handle popup
                 try:
                     no_thanks_button = WebDriverWait(driver, 10).until(
                         EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-click='close']"))
@@ -239,9 +239,44 @@ class IntegratedObituaryPropertyScraper:
                     time.sleep(2)
                 except Exception as e:
                     print(f"No popup found or couldn't close it: {e}")
+    
+                def collect_visible_obituaries():
+                    soup = BeautifulSoup(driver.page_source, 'html.parser')
+                    current_date = None
+                    current_entries = set()
+                    
+                    for element in soup.find_all(['p', 'h4']):
+                        if element.get('color') == 'neutral50' and 'Box-sc-ucqo0b-0' in element.get('class', []):
+                            current_date = element.text.strip()
+                        elif element.get('data-component') == 'PersonCardFullName':
+                            full_name = element.text.strip()
+                            if current_date and full_name:
+                                first_name, last_name, name = self.split_name(full_name)
+                                entry = {
+                                    'first_name': first_name,
+                                    'last_name': last_name,
+                                    'name': name,
+                                    'date': current_date,
+                                    'source': 'legacy.com',
+                                    'age': 'N/A',
+                                    'location': 'Ohio'
+                                }
+                                self.obituaries.append(entry)
                 
-                # Your existing collect_visible_obituaries and scrolling code...
+                current_position = 0
+                scroll_amount = 500
                 
+                while True:
+                    collect_visible_obituaries()
+                    current_position += scroll_amount
+                    driver.execute_script(f"window.scrollTo(0, {current_position});")
+                    time.sleep(1)
+                    
+                    total_height = driver.execute_script("return document.body.scrollHeight")
+                    if current_position >= total_height:
+                        collect_visible_obituaries()
+                        break
+                        
                 return  # Successful completion
                 
             except Exception as e:
@@ -257,7 +292,7 @@ class IntegratedObituaryPropertyScraper:
                 else:
                     print("All attempts to scrape legacy.com failed")
                     raise
-            
+                
     def scrape_dispatch(self, driver):
         """Scrape obituaries from dispatch.com with enhanced timeout handling"""
         print("\nScraping dispatch.com...")
