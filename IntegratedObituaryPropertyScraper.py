@@ -18,6 +18,8 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from dotenv import load_dotenv
 import io
+import json
+import traceback
 class IntegratedObituaryPropertyScraper:
     def __init__(self):
         self.obituaries = []
