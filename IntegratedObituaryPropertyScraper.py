@@ -228,81 +228,126 @@ class IntegratedObituaryPropertyScraper:
                 collect_visible_obituaries()
                 break
             
-    def scrape_dispatch(self, driver):
-        """Scrape obituaries from dispatch.com"""
+   def scrape_dispatch(self, driver):
+        """Scrape obituaries from dispatch.com with enhanced timeout handling"""
         print("\nScraping dispatch.com...")
-        driver.get(self.sources['dispatch'])
-        time.sleep(2)
-
-        scroll_count = 0
-        max_scrolls = 50
-
-        while scroll_count < max_scrolls:
+        max_retries = 3
+        current_retry = 0
+        
+        while current_retry < max_retries:
             try:
-                date_headers = driver.find_elements(By.CSS_SELECTOR, 'h2.MuiTypography-root.MuiTypography-h2.css-1cbvm0s')
+                print(f"Attempt {current_retry + 1} of {max_retries}")
+                # Set page load timeout
+                driver.set_page_load_timeout(30)
+                driver.implicitly_wait(10)
                 
-                for date_header in date_headers:
-                    current_date = date_header.text
-                    
-                    containers = driver.find_elements(By.CSS_SELECTOR, 'div.MuiGrid-root.MuiGrid-container.css-1rwztak')
-                    
-                    for container in containers:
-                        try:
-                            name_element = container.find_element(By.CSS_SELECTOR, 'h2.obit-title')
-                            name = name_element.text.strip()
-                            
+                # Try to load the page
+                driver.get(self.sources['dispatch'])
+                print("Successfully loaded dispatch.com")
+                time.sleep(5)  # Increased initial wait
+                
+                scroll_count = 0
+                max_scrolls = 50
+                entries_found = 0
+    
+                while scroll_count < max_scrolls:
+                    try:
+                        # Use WebDriverWait for better reliability
+                        date_headers = WebDriverWait(driver, 10).until(
+                            EC.presence_of_all_elements_located(
+                                (By.CSS_SELECTOR, 'h2.MuiTypography-root.MuiTypography-h2.css-1cbvm0s')
+                            )
+                        )
+                        
+                        for date_header in date_headers:
                             try:
-                                age = container.find_element(By.CSS_SELECTOR, '[aria-label="age"]').text.replace('Age ', '').strip()
-                            except:
-                                age = 'N/A'
+                                current_date = date_header.text
+                                print(f"Processing date: {current_date}")
                                 
-                            try:
-                                location = container.find_element(By.CSS_SELECTOR, '[aria-label="location"]').text.strip()
-                            except:
-                                location = 'N/A'
-                            
-                            first_name, last_name, full_name = self.split_name(name)
-                            entry = {
-                                'first_name': first_name,
-                                'last_name': last_name,
-                                'date': current_date,
-                                'name': full_name,
-                                'source': 'dispatch.com',
-                                'age': age,
-                                'location': location
-                            }
-                            
-                            # Check for duplicates before adding
-                            if not any(
-                                o['first_name'] == entry['first_name'] and 
-                                o['last_name'] == entry['last_name'] and 
-                                o['date'] == entry['date'] and 
-                                o['source'] == entry['source'] 
-                                for o in self.obituaries
-                            ):
-                                self.obituaries.append(entry)
-                                print(f"Successfully scraped: {name}")
+                                containers = WebDriverWait(driver, 5).until(
+                                    EC.presence_of_all_elements_located(
+                                        (By.CSS_SELECTOR, 'div.MuiGrid-root.MuiGrid-container.css-1rwztak')
+                                    )
+                                )
                                 
-                        except Exception as e:
-                            print(f"Error processing container: {e}")
-                            continue
+                                for container in containers:
+                                    try:
+                                        name_element = container.find_element(By.CSS_SELECTOR, 'h2.obit-title')
+                                        name = name_element.text.strip()
+                                        
+                                        age = 'N/A'
+                                        try:
+                                            age_element = container.find_element(By.CSS_SELECTOR, '[aria-label="age"]')
+                                            age = age_element.text.replace('Age ', '').strip()
+                                        except:
+                                            pass
+                                            
+                                        location = 'N/A'
+                                        try:
+                                            location_element = container.find_element(By.CSS_SELECTOR, '[aria-label="location"]')
+                                            location = location_element.text.strip()
+                                        except:
+                                            pass
+                                        
+                                        first_name, last_name, full_name = self.split_name(name)
+                                        entry = {
+                                            'first_name': first_name,
+                                            'last_name': last_name,
+                                            'date': current_date,
+                                            'name': full_name,
+                                            'source': 'dispatch.com',
+                                            'age': age,
+                                            'location': location
+                                        }
+                                        
+                                        if not any(
+                                            o['first_name'] == entry['first_name'] and 
+                                            o['last_name'] == entry['last_name'] and 
+                                            o['date'] == entry['date'] and 
+                                            o['source'] == entry['source'] 
+                                            for o in self.obituaries
+                                        ):
+                                            self.obituaries.append(entry)
+                                            entries_found += 1
+                                            print(f"Found obituary: {name}")
+                                            
+                                    except Exception as e:
+                                        print(f"Error processing individual entry: {str(e)}")
+                                        continue
+                            except Exception as e:
+                                print(f"Error processing date header: {str(e)}")
+                                continue
+                                
+                        # Scroll with explicit wait
+                        last_height = driver.execute_script("return document.body.scrollHeight")
+                        driver.execute_script("window.scrollBy(0, 500);")
+                        time.sleep(2)  # Increased scroll wait
+                        
+                        new_height = driver.execute_script("return document.body.scrollHeight")
+                        if new_height == last_height or scroll_count >= max_scrolls:
+                            print("Reached end of page or max scrolls")
+                            return  # Successfully completed
                             
+                        scroll_count += 1
+                        print(f"Scrolled {scroll_count} times, found {entries_found} entries")
+                        
+                    except Exception as e:
+                        print(f"Error during scroll iteration: {str(e)}")
+                        if scroll_count > 0:  # If we've already found some entries, consider it a success
+                            return
+                        break  # Otherwise try again
+                        
+                return  # Successfully completed
+                
             except Exception as e:
-                print(f"Error extracting data: {e}")
-
-            last_height = driver.execute_script("return document.body.scrollHeight")
-            current_scroll = driver.execute_script("return window.pageYOffset")
-            
-            driver.execute_script("window.scrollBy(0, 500);")
-            time.sleep(1)
-            
-            new_scroll = driver.execute_script("return window.pageYOffset")
-            if new_scroll == current_scroll:
-                print("Reached end of page")
-                break
-                
-            scroll_count += 1
-
+                print(f"Attempt {current_retry + 1} failed: {str(e)}")
+                current_retry += 1
+                if current_retry < max_retries:
+                    print("Retrying after short delay...")
+                    time.sleep(5)
+                else:
+                    print("All attempts to scrape dispatch.com failed")
+                    break  # Exit after all retries are exhausted
     def search_property(self, first_name, last_name):
         """Search property information for a given name"""
         try:
