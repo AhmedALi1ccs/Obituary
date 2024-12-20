@@ -535,7 +535,7 @@ class IntegratedObituaryPropertyScraper:
                 print(f"  Site Address: {site_address}")
                 print(f"  City: {city}, Zip: {zip_code}")
                 time.sleep(2)
-            df = split_address(df)
+            df = process_addresses(df)
             df = df.rename(columns={'owner_mailing': 'Mailing address', 'site_address': 'Property Address'})
             # Get current date in MM/DD/YY format
             current_date = datetime.now().strftime('%m_%d_%y')
