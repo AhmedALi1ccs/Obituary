@@ -252,37 +252,84 @@ class IntegratedObituaryPropertyScraper:
             if current_position >= total_height:
                 collect_visible_obituaries()
                 break
-            
+    #        
     def scrape_dispatch(self, driver):
-        """Scrape obituaries from dispatch.com"""
+        """Scrape obituaries from dispatch.com with improved timeout handling"""
         print("\nScraping dispatch.com...")
-        driver.get(self.sources['dispatch'])
-        time.sleep(2)
-
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                # Initial navigation
+                driver.set_page_load_timeout(30)  # Shorter initial timeout
+                driver.get(self.sources['dispatch'])
+                
+                # Simulate pressing enter in URL bar by executing JavaScript refresh
+                driver.execute_script("window.location.href = window.location.href")
+                
+                # Wait for initial content with explicit wait
+                WebDriverWait(driver, 30).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, 'div.MuiGrid-root.MuiGrid-container'))
+                )
+                print("Successfully loaded dispatch.com")
+                break
+                
+            except Exception as e:
+                retry_count += 1
+                print(f"Attempt {retry_count} failed: {str(e)}")
+                
+                if retry_count < max_retries:
+                    print(f"Retrying... (Attempt {retry_count + 1} of {max_retries})")
+                    # Clear cookies and cache between attempts
+                    driver.delete_all_cookies()
+                    try:
+                        driver.execute_script("window.localStorage.clear()")
+                        driver.execute_script("window.sessionStorage.clear()")
+                    except:
+                        pass
+                    time.sleep(5)  # Wait between retries
+                else:
+                    print("Max retries reached for initial load")
+                    raise
+        
         scroll_count = 0
         max_scrolls = 50
-
+        
         while scroll_count < max_scrolls:
             try:
-                date_headers = driver.find_elements(By.CSS_SELECTOR, 'h2.MuiTypography-root.MuiTypography-h2.css-1cbvm0s')
+                # Use explicit waits for date headers
+                date_headers = WebDriverWait(driver, 10).until(
+                    EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'h2.MuiTypography-root.MuiTypography-h2.css-1cbvm0s'))
+                )
                 
                 for date_header in date_headers:
                     current_date = date_header.text
                     
-                    containers = driver.find_elements(By.CSS_SELECTOR, 'div.MuiGrid-root.MuiGrid-container.css-1rwztak')
+                    # Use explicit waits for containers
+                    containers = WebDriverWait(driver, 10).until(
+                        EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'div.MuiGrid-root.MuiGrid-container.css-1rwztak'))
+                    )
                     
                     for container in containers:
                         try:
-                            name_element = container.find_element(By.CSS_SELECTOR, 'h2.obit-title')
+                            # Use explicit waits for each element
+                            name_element = WebDriverWait(container, 5).until(
+                                EC.presence_of_element_located((By.CSS_SELECTOR, 'h2.obit-title'))
+                            )
                             name = name_element.text.strip()
                             
                             try:
-                                age = container.find_element(By.CSS_SELECTOR, '[aria-label="age"]').text.replace('Age ', '').strip()
+                                age = WebDriverWait(container, 2).until(
+                                    EC.presence_of_element_located((By.CSS_SELECTOR, '[aria-label="age"]'))
+                                ).text.replace('Age ', '').strip()
                             except:
                                 age = 'N/A'
                                 
                             try:
-                                location = container.find_element(By.CSS_SELECTOR, '[aria-label="location"]').text.strip()
+                                location = WebDriverWait(container, 2).until(
+                                    EC.presence_of_element_located((By.CSS_SELECTOR, '[aria-label="location"]'))
+                                ).text.strip()
                             except:
                                 location = 'N/A'
                             
@@ -312,21 +359,31 @@ class IntegratedObituaryPropertyScraper:
                             print(f"Error processing container: {e}")
                             continue
                             
-            except Exception as e:
-                print(f"Error extracting data: {e}")
-
-            last_height = driver.execute_script("return document.body.scrollHeight")
-            current_scroll = driver.execute_script("return window.pageYOffset")
-            
-            driver.execute_script("window.scrollBy(0, 500);")
-            time.sleep(1)
-            
-            new_scroll = driver.execute_script("return window.pageYOffset")
-            if new_scroll == current_scroll:
-                print("Reached end of page")
-                break
+                # Improved scrolling with verification
+                last_height = driver.execute_script("return document.body.scrollHeight")
+                driver.execute_script("window.scrollBy(0, 500);")
+                time.sleep(2)  # Give more time for content to load
                 
-            scroll_count += 1
+                # Verify scroll was successful
+                new_height = driver.execute_script("return document.body.scrollHeight")
+                current_scroll = driver.execute_script("return window.pageYOffset")
+                
+                if new_height == last_height and current_scroll > 0:
+                    # Try to force refresh of content
+                    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                    time.sleep(2)
+                    
+                    if driver.execute_script("return document.body.scrollHeight") == last_height:
+                        print("Reached end of page")
+                        break
+                
+                scroll_count += 1
+                
+            except Exception as e:
+                print(f"Error during scroll iteration: {e}")
+                # Try to recover and continue
+                time.sleep(2)
+                continue
 
     def search_property(self, first_name, last_name):
         """Search property information for a given name"""
