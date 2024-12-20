@@ -469,7 +469,7 @@ class IntegratedObituaryPropertyScraper:
             # Convert to DataFrame and remove duplicates
             df = pd.DataFrame(self.obituaries)
             df = df.drop_duplicates(subset=['name', 'source'])
-            
+            df['Tag'] = 'Obituary-Ahmed Fetched'
             # Add new columns for property information
             df['owner_mailing'] = ''
             df['contact_address'] = ''
