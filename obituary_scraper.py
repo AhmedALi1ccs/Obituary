@@ -455,7 +455,50 @@ class IntegratedObituaryPropertyScraper:
         except Exception as e:
             print(f"Error searching property for {first_name} {last_name}: {str(e)}")
             return 'NOTONAUDITOR', 'NOTONAUDITOR', 'NOTONAUDITOR', 'NOTONAUDITOR', 'NOTONAUDITOR'
+    def process_addresses(df):
+        df = df.copy()
+        
+        # Process contact address
+        parts_contact = df['contact address'].str.split(' ', expand=False)
+        
+        def process_contact_row(parts):
+            if isinstance(parts, list) and len(parts) > 1:
+                zip_code = parts[-1].strip()
+                state = parts[-2].strip()
+                city = ' '.join(parts[:-2]).strip()
+                return pd.Series([city, state, zip_code])
+            else:
+                return pd.Series([parts[0] if isinstance(parts, list) else parts, None, None])
+        
+        # Process city column
+        parts_city = df['city'].str.split(' ', expand=False)
+        
+        def process_city_row(parts):
+            if isinstance(parts, list) and len(parts) > 1:
+                state = parts[-1].strip()
+                city = ' '.join(parts[:-1]).strip()
+                return pd.Series([city, state])
+            else:
+                return pd.Series([parts[0] if isinstance(parts, list) else parts, None])
+        
+        # Apply the processing functions
+        contact_cols = df['contact address'].apply(lambda x: process_contact_row(x.split(' ') if pd.notnull(x) else x))
+        city_cols = df['city'].apply(lambda x: process_city_row(x.split(' ') if pd.notnull(x) else x))
+        
+        # Assign new columns
+        df['Mailing City'] = contact_cols[0]
+        df['Mailing State'] = contact_cols[1]
+        df['Mailing Zip'] = contact_cols[2]
+        
+        df['Property City'] = city_cols[0]
+        df['Property State'] = city_cols[1]
+        
+        # Drop original columns if needed
+        df = df.drop(['contact address', 'city'], axis=1)
+        
+        return df
 
+    
     def run(self):
         """Run the complete integrated scraping process"""
         try:
@@ -492,7 +535,8 @@ class IntegratedObituaryPropertyScraper:
                 print(f"  Site Address: {site_address}")
                 print(f"  City: {city}, Zip: {zip_code}")
                 time.sleep(2)
-            
+            df = split_address(df)
+            df = df.rename(columns={'owner_mailing': 'Mailing address', 'site_address': 'Property Address'})
             # Get current date in MM/DD/YY format
             current_date = datetime.now().strftime('%m_%d_%y')
             filename = f'obituaries_with_property_{current_date}.csv'
