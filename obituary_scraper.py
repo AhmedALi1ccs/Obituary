@@ -9,38 +9,16 @@ import pandas as pd
 import time
 from datetime import datetime
 import re
-import random
 import os
 import sys
 import csv
+import random
 from google.oauth2.credentials import Credentials
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from dotenv import load_dotenv
 import io
-import logging
-from pathlib import Path
-import json
-import random
-from fake_useragent import UserAgent
-from selenium.webdriver.common.action_chains import ActionChains
-from selenium_stealth import stealth
-import threading
-import http.client
-import socket
-import platform
-from selenium.webdriver.support.wait import WebDriverWait
-import tempfile
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('error.log'),
-        logging.StreamHandler()
-    ]
-)
 class IntegratedObituaryPropertyScraper:
     def __init__(self):
         self.obituaries = []
@@ -50,31 +28,24 @@ class IntegratedObituaryPropertyScraper:
         }
         self.driver = None
         self.folder_id = "1Vn02sVpKU9fGLGG3fo-ZgngWXKhntNvb"
-        self.session_storage = {}
-        self.user_agent = UserAgent()
-        load_dotenv()
-    #
+        load_dotenv()  # Load environment variables
+
     def setup_google_drive(self):
         """Setup Google Drive API service"""
         try:
-            # Check for credentials file first
-            creds_file = Path('google_credentials.json')
-            if creds_file.exists():
-                credentials = service_account.Credentials.from_service_account_file(
-                    str(creds_file),
-                    scopes=['https://www.googleapis.com/auth/drive.file']
-                )
-            else:
-                # Fall back to environment variable
-                creds_json = json.loads(os.getenv('GOOGLE_CREDENTIALS_JSON', '{}'))
-                credentials = service_account.Credentials.from_service_account_info(
-                    creds_json,
-                    scopes=['https://www.googleapis.com/auth/drive.file']
-                )
+            credentials = service_account.Credentials.from_service_account_info(
+                eval(os.getenv('GOOGLE_CREDENTIALS_JSON')),
+                scopes=['https://www.googleapis.com/auth/drive.file']
+            )
             return build('drive', 'v3', credentials=credentials)
         except Exception as e:
-            logging.error(f"Error setting up Google Drive: {e}")
+            print(f"Error setting up Google Drive: {e}")
             return None
+    
+    def add_random_delay(self):
+        """Add random delay between actions to appear more human-like"""
+        time.sleep(random.uniform(1, 3))
+
     def save_to_drive(self, df, filename):
         """Save DataFrame to Google Drive"""
         try:
@@ -118,112 +89,61 @@ class IntegratedObituaryPropertyScraper:
         except Exception as e:
             print(f"Error saving to Google Drive: {e}")
             return False
-    #
+
     def setup_driver(self):
-        """Enhanced driver setup with stealth measures"""
+        """Initialize undetected-chromedriver with macOS compatibility fixes"""
         try:
+            time.sleep(2)
+            
             options = uc.ChromeOptions()
             
-            # Basic Chrome options
-            options.add_argument('--disable-gpu')
+            # Basic required options
+            options.add_argument('--no-sandbox')
             options.add_argument('--disable-dev-shm-usage')
-            options.add_argument('--disable-features=VizDisplayCompositor')
-            options.add_argument('--disable-blink-features=AutomationControlled')
-            options.add_argument('--start-maximized')
             
-            # Additional stealth options
-            options.add_argument('--disable-blink-features=AutomationControlled')
-            options.add_argument('--disable-infobars')
-            options.add_argument('--disable-browser-side-navigation')
-            options.add_argument('--disable-site-isolation-trials')
+            # Don't use --headless=new on macOS as it can cause issues
+            options.add_argument('--headless')
             
-            # Random window size
-            width = random.randint(1050, 1920)
-            height = random.randint(800, 1080)
-            options.add_argument(f'--window-size={width},{height}')
-
-            # Set random timezone
-            timezones = ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles']
-            options.add_argument(f'--timezone={random.choice(timezones)}')
-
-            # Create temp directory for custom profile
-            temp_dir = tempfile.mkdtemp()
-            options.add_argument(f'--user-data-dir={temp_dir}')
+            # Set a reasonable window size
+            options.add_argument('--window-size=1920,1080')
             
-            # Platform specific configurations
-            if platform.system() == 'Darwin':  # MacOS
-                options.add_argument('--disable-features=GPU')
-                options.binary_location = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-            elif platform.system() == 'Linux':
-                if os.getenv('CI'):
-                    options.binary_location = '/usr/bin/google-chrome'
-                    options.add_argument('--headless=new')
-                    options.add_argument('--no-sandbox')
-
+            # Add user agent
+            options.add_argument('--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+            
+            # Reduce memory usage
+            options.add_argument('--disable-gpu')
+            options.add_argument('--disable-software-rasterizer')
+            options.add_argument('--disable-extensions')
+            
+            # Create the driver with minimal options first
             self.driver = uc.Chrome(
                 options=options,
                 driver_executable_path=None,
-                version_main=None  # Let it auto-detect
+                use_subprocess=True,
+                version_main=None
             )
-
-            # Apply stealth settings
-            stealth(self.driver,
-                languages=["en-US", "en"],
-                vendor="Google Inc.",
-                platform="Win32",
-                webgl_vendor="Intel Inc.",
-                renderer="Intel Iris OpenGL Engine",
-                fix_hairline=True,
-            )
-
-            # Set CDP preferences
-            self.driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
-                'source': '''
-                    Object.defineProperty(navigator, 'webdriver', {
-                        get: () => undefined
-                    });
-                    Object.defineProperty(navigator, 'plugins', {
-                        get: () => [1, 2, 3, 4, 5]
-                    });
-                    window.chrome = {
-                        runtime: {}
-                    };
-                '''
-            })
-
-            return True
-
+            
+            # Set window size after initialization
+            self.driver.set_window_size(1920, 1080)
+            
+            # Basic stealth settings after driver is created
+            self.driver.execute_script("""
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
+                });
+            """)
+            
+            # Add a small delay after setup
+            time.sleep(3)
+            
+            return self.driver
+            
         except Exception as e:
-            logging.error(f"Error in setup_driver: {str(e)}", exc_info=True)
-            return False
+            print(f"Detailed error setting up Chrome driver: {str(e)}")
+            if self.driver:
+                self.driver.quit()
+            raise e
 
-    def emulate_human_behavior(self):
-        """Emulate realistic human behavior"""
-        try:
-            # Random mouse movements
-            for _ in range(random.randint(2, 5)):
-                x = random.randint(0, 500)
-                y = random.randint(0, 500)
-                ActionChains(self.driver).move_by_offset(x, y).perform()
-                time.sleep(random.uniform(0.1, 0.3))
-
-            # Random scroll behavior
-            scroll_amount = random.randint(100, 300)
-            self.driver.execute_script(f"window.scrollBy(0, {scroll_amount})")
-            time.sleep(random.uniform(0.5, 1.5))
-
-            # Sometimes move mouse to a random element
-            elements = self.driver.find_elements(By.TAG_NAME, "a")
-            if elements:
-                random_element = random.choice(elements)
-                try:
-                    ActionChains(self.driver).move_to_element(random_element).perform()
-                    time.sleep(random.uniform(0.2, 0.7))
-                except:
-                    pass
-
-        except Exception as e:
-            logging.warning(f"Error in emulate_human_behavior: {str(e)}")
 
     def split_name(self, full_name):
         """Split full name into first and last name with special case handling"""
@@ -256,150 +176,82 @@ class IntegratedObituaryPropertyScraper:
     # [Previous scraping methods remain the same: scrape_legacy, scrape_fcfreepress, scrape_dispatch]
     # Include all the scraping methods from the first code here
     def scrape_legacy(self, driver):
-        """Enhanced Legacy.com scraping with advanced anti-detection"""
+        """Scrape obituaries from legacy.com with enhanced anti-detection measures"""
         print("\nScraping legacy.com...")
-        max_retries = 3
-        current_retry = 0
         
-        while current_retry < max_retries:
-            try:
-                # Set random user agent
-                driver.execute_cdp_cmd('Network.setUserAgentOverride', {
-                    "userAgent": self.user_agent.random
-                })
-
-                # Set convincing headers
-                driver.execute_cdp_cmd('Network.setExtraHTTPHeaders', {
-                    "headers": {
-                        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-                        "accept-language": "en-US,en;q=0.9",
-                        "sec-ch-ua": '"Not.A/Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-                        "sec-ch-ua-mobile": "?0",
-                        "sec-ch-ua-platform": '"Windows"',
-                        "sec-fetch-dest": "document",
-                        "sec-fetch-mode": "navigate",
-                        "sec-fetch-site": "none",
-                        "sec-fetch-user": "?1",
-                        "upgrade-insecure-requests": "1",
-                        "User-Agent": self.user_agent.random
-                    }
-                })
-
-                # Initial delay
-                time.sleep(random.uniform(3, 6))
-
-                # Navigate with error handling
-                driver.get(self.sources['legacy'])
-                
-                # Wait for page load with human behavior simulation
-                time.sleep(random.uniform(4, 7))
-                self.emulate_human_behavior()
-
-                # Handle various popups and overlays
-                popup_selectors = [
-                    "button[data-click='close']",
-                    "button.modal__close",
-                    "button[aria-label='Close']",
-                    ".modal-close-button",
-                    "#close-button",
-                    "button[data-testid='button-accept']",
-                    ".modal__close",
-                    "[data-qa='close']"
-                ]
-
-                for selector in popup_selectors:
-                    try:
-                        WebDriverWait(driver, 5).until(
-                            EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
-                        ).click()
-                        time.sleep(random.uniform(1, 2))
-                        print(f"Handled popup with selector: {selector}")
-                    except:
-                        continue
-
-                # Scroll and collect data with human-like behavior
-                last_height = driver.execute_script("return document.body.scrollHeight")
-                obituaries_count = 0
-                scroll_attempts = 0
-                max_scroll_attempts = 30
-
-                while scroll_attempts < max_scroll_attempts:
-                    # Collect obituaries
-                    self._collect_obituaries_from_page(driver)
-                    
-                    # Human-like scroll
-                    scroll_px = random.randint(100, 300)
-                    driver.execute_script(f"window.scrollBy(0, {scroll_px});")
-                    time.sleep(random.uniform(1, 3))
-                    
-                    # Sometimes move mouse
-                    if random.random() < 0.3:
-                        self.emulate_human_behavior()
-                    
-                    # Check progress
-                    new_height = driver.execute_script("return document.body.scrollHeight")
-                    if new_height == last_height:
-                        scroll_attempts += 1
-                    else:
-                        scroll_attempts = 0
-                        last_height = new_height
-
-                    # Random pause
-                    if random.random() < 0.2:
-                        time.sleep(random.uniform(2, 4))
-
-                print(f"Successfully collected {len(self.obituaries)} obituaries")
-                break
-
-            except Exception as e:
-                current_retry += 1
-                logging.error(f"Error in scrape_legacy (attempt {current_retry}): {str(e)}", exc_info=True)
-                if current_retry < max_retries:
-                    print(f"Retrying... (attempt {current_retry + 1} of {max_retries})")
-                    time.sleep(random.uniform(10, 20))  # Longer delay between retries
-                else:
-                    print("Max retries reached. Moving on...")
-                    
-    def _collect_obituaries_from_page(self, driver):
-        """Helper method to collect obituaries from current page"""
+        # Add random delay before navigation
+        self.add_random_delay()
+        
+        # Clear cookies and cache before visiting
+        driver.execute_cdp_cmd('Network.clearBrowserCookies', {})
+        driver.execute_cdp_cmd('Network.clearBrowserCache', {})
+        
+        driver.get(self.sources['legacy'])
+        self.add_random_delay()
+        
+        # Simulate human-like scrolling behavior
+        def human_like_scroll():
+            total_height = driver.execute_script("return document.body.scrollHeight")
+            current_height = 0
+            scroll_step = random.randint(100, 300)
+            
+            while current_height < total_height:
+                next_height = min(current_height + scroll_step, total_height)
+                driver.execute_script(f"window.scrollTo({current_height}, {next_height})")
+                current_height = next_height
+                time.sleep(random.uniform(0.5, 1.5))
+        
         try:
+            # Handle popup with retry mechanism
+            for _ in range(3):
+                try:
+                    WebDriverWait(driver, 10).until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-click='close']"))
+                    ).click()
+                    print("Closed popup successfully")
+                    break
+                except:
+                    self.add_random_delay()
+                    continue
+        except Exception as e:
+            print("No popup found or couldn't close it:", e)
+
+        def collect_visible_obituaries():
             soup = BeautifulSoup(driver.page_source, 'html.parser')
+            current_date = None
+            current_entries = set()
             
-            # Find date elements
-            date_elements = soup.find_all(['p', 'h4'], attrs={'color': 'neutral50'})
-            
-            for date_elem in date_elements:
-                current_date = date_elem.text.strip()
-                
-                # Find associated obituary names
-                name_elements = soup.find_all(attrs={'data-component': 'PersonCardFullName'})
-                
-                for name_elem in name_elements:
-                    full_name = name_elem.text.strip()
+            for element in soup.find_all(['p', 'h4']):
+                if element.get('color') == 'neutral50' and 'Box-sc-ucqo0b-0' in element.get('class', []):
+                    current_date = element.text.strip()
+                elif element.get('data-component') == 'PersonCardFullName':
+                    full_name = element.text.strip()
                     if current_date and full_name:
                         first_name, last_name, name = self.split_name(full_name)
-                        
-                        # Check for duplicates
-                        if not any(o['name'] == name and o['date'] == current_date 
-                                 for o in self.obituaries):
-                            entry = {
-                                'first_name': first_name,
-                                'last_name': last_name,
-                                'name': name,
-                                'date': current_date,
-                                'source': 'legacy.com',
-                                'age': 'N/A',
-                                'location': 'Ohio'
-                            }
-                            self.obituaries.append(entry)
-                            print(f"Added: {name} - {current_date}")
-                            
-                            # Add human-like pause
-                            time.sleep(random.uniform(0.1, 0.3))
-                            
-        except Exception as e:
-            logging.warning(f"Error collecting obituaries from page: {str(e)}")
-
+                        entry = {
+                            'first_name': first_name,
+                            'last_name': last_name,
+                            'name': name,
+                            'date': current_date,
+                            'source': 'legacy.com',
+                            'age': 'N/A',
+                            'location': 'Ohio'
+                        }
+                        self.obituaries.append(entry)
+            
+        current_position = 0
+        scroll_amount = 200
+        
+        while True:
+            collect_visible_obituaries()
+            current_position += scroll_amount
+            driver.execute_script(f"window.scrollTo(0, {current_position});")
+            time.sleep(1)
+            
+            total_height = driver.execute_script("return document.body.scrollHeight")
+            if current_position >= total_height:
+                collect_visible_obituaries()
+                break
             
     def scrape_dispatch(self, driver):
         """Scrape obituaries from dispatch.com"""
