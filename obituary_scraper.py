@@ -9,6 +9,7 @@ import pandas as pd
 import time
 from datetime import datetime
 import re
+import random
 import os
 import sys
 import csv
