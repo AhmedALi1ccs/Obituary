@@ -4,6 +4,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
 from bs4 import BeautifulSoup
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.action_chains import ActionChains
 import undetected_chromedriver as uc
 import pandas as pd
 import time
@@ -266,8 +268,10 @@ class IntegratedObituaryPropertyScraper:
                 driver.get(self.sources['dispatch'])
                 
                 # Simulate pressing enter in URL bar by executing JavaScript refresh
-                driver.execute_script("window.location.href = window.location.href")
-                
+                ActionChains(driver).send_keys(Keys.CONTROL + "l").perform()  # Ctrl+L focuses URL bar
+                # Send enter key
+                ActionChains(driver).send_keys(Keys.RETURN).perform()
+                                
                 # Wait for initial content with explicit wait
                 WebDriverWait(driver, 30).until(
                     EC.presence_of_element_located((By.CSS_SELECTOR, 'div.MuiGrid-root.MuiGrid-container'))
