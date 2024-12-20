@@ -161,54 +161,153 @@ class IntegratedObituaryPropertyScraper:
     # [Previous scraping methods remain the same: scrape_legacy, scrape_fcfreepress, scrape_dispatch]
     # Include all the scraping methods from the first code here
     def scrape_legacy(self, driver):
-        """Scrape obituaries from legacy.com"""
+        """Scrape obituaries from legacy.com with enhanced anti-bot handling"""
         print("\nScraping legacy.com...")
-        driver.get(self.sources['legacy'])
-        time.sleep(5)
-        try:
-            no_thanks_button = driver.find_element(By.CSS_SELECTOR, "button[data-click='close']")
-            no_thanks_button.click()
-            print("Closed popup successfully")
-            time.sleep(2)  # Wait for popup to close
-        except Exception as e:
-            print("No popup found or couldn't close it:", e)
-
-        def collect_visible_obituaries():
-            soup = BeautifulSoup(driver.page_source, 'html.parser')
-            current_date = None
-            current_entries = set()
-            
-            for element in soup.find_all(['p', 'h4']):
-                if element.get('color') == 'neutral50' and 'Box-sc-ucqo0b-0' in element.get('class', []):
-                    current_date = element.text.strip()
-                elif element.get('data-component') == 'PersonCardFullName':
-                    full_name = element.text.strip()
-                    if current_date and full_name:
-                        first_name, last_name, name = self.split_name(full_name)
-                        entry = {
-                            'first_name': first_name,
-                            'last_name': last_name,
-                            'name': name,
-                            'date': current_date,
-                            'source': 'legacy.com',
-                            'age': 'N/A',
-                            'location': 'Ohio'
-                        }
-                        self.obituaries.append(entry)
-            
-        current_position = 0
-        scroll_amount = 500
         
-        while True:
-            collect_visible_obituaries()
-            current_position += scroll_amount
-            driver.execute_script(f"window.scrollTo(0, {current_position});")
-            time.sleep(1)
+        try:
+            # Additional options for undetected_chromedriver to appear more human-like
+            driver.execute_cdp_cmd('Network.setUserAgentOverride', {
+                "userAgent": 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            })
             
-            total_height = driver.execute_script("return document.body.scrollHeight")
-            if current_position >= total_height:
+            # Set additional headers
+            driver.execute_cdp_cmd('Network.enable', {})
+            driver.execute_cdp_cmd('Network.setExtraHTTPHeaders', {
+                "headers": {
+                    "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+                    "accept-language": "en-US,en;q=0.9",
+                    "sec-ch-ua": '"Not.A/Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                    "sec-ch-ua-mobile": "?0",
+                    "sec-ch-ua-platform": '"Windows"',
+                    "sec-fetch-dest": "document",
+                    "sec-fetch-mode": "navigate",
+                    "sec-fetch-site": "same-origin",
+                    "sec-fetch-user": "?1",
+                    "upgrade-insecure-requests": "1"
+                }
+            })
+    
+            # Add random delay before accessing the site
+            time.sleep(random.uniform(2, 5))
+            
+            driver.get(self.sources['legacy'])
+            
+            # Wait longer for initial page load
+            time.sleep(random.uniform(5, 8))
+    
+            # Handle cookie consent if it appears
+            try:
+                cookie_buttons = driver.find_elements(By.CSS_SELECTOR, "button[data-testid='button-accept']")
+                if cookie_buttons:
+                    cookie_buttons[0].click()
+                    time.sleep(2)
+            except Exception as e:
+                print(f"No cookie consent found or error handling it: {e}")
+    
+            # Try to handle "No thanks" popup with multiple approaches
+            popup_selectors = [
+                "button[data-click='close']",
+                "button.modal__close",
+                "button[aria-label='Close']",
+                ".modal-close-button",
+                "#close-button"
+            ]
+            
+            for selector in popup_selectors:
+                try:
+                    popup = WebDriverWait(driver, 5).until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
+                    )
+                    popup.click()
+                    print(f"Closed popup using selector: {selector}")
+                    time.sleep(2)
+                    break
+                except:
+                    continue
+    
+            def collect_visible_obituaries():
+                soup = BeautifulSoup(driver.page_source, 'html.parser')
+                current_date = None
+                
+                for element in soup.find_all(['p', 'h4', 'div']):
+                    # Look for date elements with multiple possible class combinations
+                    if (element.get('color') == 'neutral50' and 
+                        any(cls in element.get('class', []) for cls in ['Box-sc', 'DateText'])):
+                        current_date = element.text.strip()
+                    
+                    # Look for name elements with multiple possible attributes
+                    elif (element.get('data-component') == 'PersonCardFullName' or 
+                          'obituary-name' in element.get('class', [])):
+                        full_name = element.text.strip()
+                        if current_date and full_name:
+                            first_name, last_name, name = self.split_name(full_name)
+                            entry = {
+                                'first_name': first_name,
+                                'last_name': last_name,
+                                'name': name,
+                                'date': current_date,
+                                'source': 'legacy.com',
+                                'age': 'N/A',
+                                'location': 'Ohio'
+                            }
+                            if not any(o['name'] == entry['name'] and 
+                                     o['date'] == entry['date'] for o in self.obituaries):
+                                self.obituaries.append(entry)
+                                print(f"Found obituary: {name} - {current_date}")
+            
+            # Scroll with random delays and human-like behavior
+            current_position = 0
+            last_count = 0
+            no_new_entries_count = 0
+            
+            while no_new_entries_count < 3:  # Stop if no new entries found after 3 attempts
+                initial_count = len(self.obituaries)
+                
+                # Random scroll amount
+                scroll_amount = random.randint(300, 700)
+                current_position += scroll_amount
+                
+                # Smooth scroll
+                driver.execute_script(f"""
+                    window.scrollTo({{
+                        top: {current_position},
+                        behavior: 'smooth'
+                    }});
+                """)
+                
+                # Random wait between scrolls
+                time.sleep(random.uniform(1.5, 3.5))
+                
                 collect_visible_obituaries()
-                break
+                
+                # Check if we found new entries
+                if len(self.obituaries) == initial_count:
+                    no_new_entries_count += 1
+                else:
+                    no_new_entries_count = 0
+                
+                # Check if we've reached the bottom
+                total_height = driver.execute_script("return document.body.scrollHeight")
+                if current_position >= total_height:
+                    break
+                    
+                # Add some random mouse movements
+                if random.random() < 0.3:  # 30% chance of mouse movement
+                    try:
+                        element = driver.find_element(By.TAG_NAME, "body")
+                        ActionChains(driver).move_to_element_with_offset(
+                            element, 
+                            random.randint(0, 500), 
+                            random.randint(0, 500)
+                        ).perform()
+                    except:
+                        pass
+            
+            print(f"Total obituaries collected from legacy.com: {len(self.obituaries)}")
+            
+        except Exception as e:
+            print(f"Error during legacy.com scraping: {str(e)}")
+            logging.error(f"Legacy.com scraping error: {str(e)}", exc_info=True)
             
     def scrape_dispatch(self, driver):
         """Scrape obituaries from dispatch.com"""
