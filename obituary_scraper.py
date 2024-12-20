@@ -55,26 +55,26 @@ class IntegratedObituaryPropertyScraper:
         load_dotenv()
     #
     def setup_google_drive(self):
-            """Setup Google Drive API service"""
-            try:
-                # Check for credentials file first
-                creds_file = Path('google_credentials.json')
-                if creds_file.exists():
-                    credentials = service_account.Credentials.from_service_account_file(
-                        str(creds_file),
-                        scopes=['https://www.googleapis.com/auth/drive.file']
-                    )
-                else:
-                    # Fall back to environment variable
-                    creds_json = json.loads(os.getenv('GOOGLE_CREDENTIALS_JSON', '{}'))
-                    credentials = service_account.Credentials.from_service_account_info(
-                        creds_json,
-                        scopes=['https://www.googleapis.com/auth/drive.file']
-                    )
-                return build('drive', 'v3', credentials=credentials)
-            except Exception as e:
-                logging.error(f"Error setting up Google Drive: {e}")
-                return None
+        """Setup Google Drive API service"""
+        try:
+            # Check for credentials file first
+            creds_file = Path('google_credentials.json')
+            if creds_file.exists():
+                credentials = service_account.Credentials.from_service_account_file(
+                    str(creds_file),
+                    scopes=['https://www.googleapis.com/auth/drive.file']
+                )
+            else:
+                # Fall back to environment variable
+                creds_json = json.loads(os.getenv('GOOGLE_CREDENTIALS_JSON', '{}'))
+                credentials = service_account.Credentials.from_service_account_info(
+                    creds_json,
+                    scopes=['https://www.googleapis.com/auth/drive.file']
+                )
+            return build('drive', 'v3', credentials=credentials)
+        except Exception as e:
+            logging.error(f"Error setting up Google Drive: {e}")
+            return None
     def save_to_drive(self, df, filename):
         """Save DataFrame to Google Drive"""
         try:
@@ -119,7 +119,7 @@ class IntegratedObituaryPropertyScraper:
             print(f"Error saving to Google Drive: {e}")
             return False
     #
-     def setup_driver(self):
+    def setup_driver(self):
         """Enhanced driver setup with stealth measures"""
         try:
             options = uc.ChromeOptions()
